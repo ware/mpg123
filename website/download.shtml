@@ -39,7 +39,10 @@
 	<p>Development happens in the subversion repository on scm.orgis.org:</p>
 	<div style="text-align:center;font-weight:bold;">svn://scm.orgis.org/mpg123/trunk</div>
 	<p>You can also browse it via the <a href="cgi-bin/viewvc.cgi">ViewVC web interface</a>. You can get snapshots from both places. </p>
-	<p>A nightly tarball with the the autotool stuff prepared is at <a href="/snapshot">http://mpg123.org/snapshot</a>.</p>
+	<p>A nightly tarball with the the autotool stuff prepared is at <a href="/snapshot">http://mpg123.org/snapshot</a>.
+	Also, there is a <a href="/mpg123-svn.dump.bz2">daily dump of the subversion repository</a> (<a href="/mpg123-svn.dump.bz2.sha512">SHA512 checksum</a>)
+	if for some reason I vanish and someone wants a jumpstart to continue.
+	</p>
 
 	<h2>Archived Downloads</h2>
 
