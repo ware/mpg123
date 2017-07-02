@@ -5,12 +5,13 @@
 .<p>Some bug fixes in libmpg123, triggered by me asking for it
 .(fuzzers swaying their aim from LAME towards mpg123):</p>
 .<ul>
-.<li>Avoid memset(NULL, 0, 0) to calm down the paranoid.</li>
+.<li>Avoid <code>memset(NULL, 0, 0)</code> to calm down the paranoid.</li>
 .<li>Fix bug 252, invalid read of size 1 in ID3v2 parser due to forgotten
 .  offset from the frame flag bytes (unnoticed in practice for a long
 .   time). Fuzzers are in the house again. This one got CVE-2017-10683.</li>
 .<li>Avoid a mostly harmless conditional jump depending on uninitialised
-.   fr->lay in compute_bpf() (mpg123_position()) when track is not ready yet.</li>
+.   <code>fr->lay</code> in <code>compute_bpf()</code>
+.(<code>mpg123_position()</code>) when track is not ready yet.</li>
 .<li>Fix undefined shifts on signed long mask in layer3.c (worked in practice,
 .   never right in theory). Code might be a bit faster now, even.
 .   Thanks to Agostino Sarubbo for reporting.</li>
