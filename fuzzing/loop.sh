@@ -16,8 +16,6 @@ set -e
 
 HEADERSIZE=679936
 HERE=$(cd $(dirname $0) && pwd)
-IFS='
-'
 
 if test -z "$MPG123"; then
         MPG123=mpg123
@@ -28,7 +26,7 @@ loop=0
 #while !  /bin/grep -q overflow loop.sh.log ; do
 while test "$err" -eq 0 ; do
   loop=$(($loop+1))
-  echo "Fuzz loop $loop ..."
+  echo "Fuzz loop $loop @ $(date)"
   workdir=$(mktemp -d fuzzwork.XXXXXX)
   mkdir $workdir/fuzzdata
   mkdir $workdir/fuzzlog
@@ -52,7 +50,14 @@ while test "$err" -eq 0 ; do
       err=$(($err+1))
     fi
     # Looking for attempted xrpnt overflow.
-    err=$(($err+$(grep -i 'attempted xrpnt overflow' "$log" | wc -l)))
+    ferr=0
+    ferr=$(($ferr+$(grep -i 'attempted xrpnt overflow' "$log" | wc -l)))
+    # GCC sanitizer produces those
+    ferr=$(($ferr+$(grep -i 'runtime error:' "$log" | wc -l)))
+    if test $ferr -gt 0; then
+      echo "==>> something interesting noted for input $f"
+    fi
+    err=$(($err+$ferr))
     echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
   done > $workdir/loop.sh.log 2>&1
   if test $err -eq 0; then
