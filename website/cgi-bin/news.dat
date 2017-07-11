@@ -1,3 +1,23 @@
+:date 2017-07-11
+:by Thomas
+:release 1.25.2
+:title More fixings
+.<p>Here is another bugfix release for you:</p>
+.<ul>
+.<li>libmpg123:
+.<ul>
+.<li>Extend pow tables for layer III to properly handle files with i-stereo and
+.   5-bit scalefactors. Never observed them for real, just as fuzzed input to
+.   trigger the read overflow. Note: This one goes on record as CVE-2017-11126,
+.   calling remote denial of service. While the accesses are out of bounds for
+.   the pow tables, they still are safely within libmpg123's memory (other
+.   static tables). Just wrong values are used for computation, no actual crash
+.   unless you use something like GCC's AddressSanitizer, nor any information
+.   disclosure.</li>
+.<li>Avoid left-shifts of negative integers in layer I decoding.</li>
+.</ul></li>
+.</ul>
+
 :date 2017-07-03
 :by Thomas
 :release 1.25.1
