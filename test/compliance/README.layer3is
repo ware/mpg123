@@ -1,0 +1,11 @@
+The layer3is directory has been added by Thomas Orgis <thomas@orgis.org> for
+having some data that actually features intensity stereo. There are samples
+with differing sampling frequencies to also provide MPEG-2 and MPEG2.5 test
+data.
+
+The data has been prepared by encoding the respective original 24 bit input
+file (resampled from 48 kHz source by SoX v14.4.2) with the mp3enc 3.1 demo
+encoder. As there was no success hunting down a binary of the old l3dec, the
+reference data has been generated with the fresh hex output of mpg123
+revision 4290. So this is mostly a regression test on mpg123 itself with
+this kind of bitstreams.

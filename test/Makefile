@@ -11,7 +11,10 @@ bins=rmsdouble.$(BIN_SUFFIX) rms16.$(BIN_SUFFIX) s16_double.$(BIN_SUFFIX) f32_do
 
 .PHONY: all clean
 
-all: binsuffix $(bins) $(shell ls compliance/layer?/fl*.mpg | sed 's:mpg:bit:') $(shell ls compliance/layer?/fl*.pcm | sed 's:pcm:double:') compliance/layer3/compl.double
+all: binsuffix $(bins) \
+  $(shell ls compliance/layer?/fl*.mpg | sed 's:mpg:bit:') \
+  $(shell ls compliance/layer?/fl*.pcm | sed 's:pcm:double:') \
+  $(shell ls compliance/layer*/*.hex | sed 's:hex:double:')
 
 clean:
 	rm -vf $(bins)
@@ -54,6 +57,9 @@ compliance/layer2/%.double: compliance/layer2/%.pcm hex24_double.$(BIN_SUFFIX)
 	./hex24_double.$(BIN_SUFFIX) < $< > $@
 
 compliance/layer3/%.double: compliance/layer3/%.hex hex24_double.$(BIN_SUFFIX)
+	./hex24_double.$(BIN_SUFFIX) < $< > $@
+
+compliance/layer3is/%.double: compliance/layer3is/%.hex hex24_double.$(BIN_SUFFIX)
 	./hex24_double.$(BIN_SUFFIX) < $< > $@
 
 %.double: %.s16 s16_double.$(BIN_SUFFIX)

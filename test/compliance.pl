@@ -13,6 +13,7 @@ my @files=
 	 "$Bin/compliance/layer1/fl*.mpg"
 	,"$Bin/compliance/layer2/fl*.mpg"
 	,"$Bin/compliance/layer3/compl.bit"
+	,"$Bin/compliance/layer3is/*.bit"
 );
 
 open(SUFDAT, "$Bin/binsuffix") or die "Hm, binsuffix file does not exist, did you run make in $Bin?";
@@ -55,10 +56,13 @@ open(my $the_stderr, '>&', \*STDERR);
 }
 
 my $results = 0;
-for(my $lay=1; $lay<=3; ++$lay)
+for(my $lay=1; $lay<=4; ++$lay)
 {
 	print "\n";
-	print "==== Layer $lay ====\n";
+	print $lay < 4
+	?	"==== Layer $lay ====\n"
+	:	"==== Layer 3 intensity stereo ====\n"
+	.	"   (no official reference, comparing to mpg123 generic 24 bit)\n";
 
 	print "--> 16 bit signed integer output\n";
 	$results += tester($files[$lay-1], 's16', $s16conv);
