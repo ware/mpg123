@@ -49,9 +49,9 @@ while test "$err" -eq 0 ; do
       echo "==>> $MPG123 failed with input $f"
       err=$(($err+1))
     fi
-    # Looking for attempted xrpnt overflow.
     ferr=0
-    ferr=$(($ferr+$(grep -i 'attempted xrpnt overflow' "$log" | wc -l)))
+    # Looking for attempted xrpnt overflow.
+    #ferr=$(($ferr+$(grep -i 'attempted xrpnt overflow' "$log" | wc -l)))
     # GCC sanitizer produces those
     ferr=$(($ferr+$(grep -i 'runtime error:' "$log" | wc -l)))
     if test $ferr -gt 0; then
