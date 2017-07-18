@@ -8,16 +8,16 @@ dnl Require autoconf version >= 2.57
 AC_PREREQ(2.57)
 
 dnl ############# Initialisation
-AC_INIT([mpg123], [1.26.0], [maintainer@mpg123.org])
+AC_INIT([mpg123], [1.25.2], [maintainer@mpg123.org])
 dnl Increment API_VERSION when the API gets changes (new functions).
 
 dnl libmpg123
 API_VERSION=44
-LIB_PATCHLEVEL=3
+LIB_PATCHLEVEL=2
 
 dnl libout123
 OUTAPI_VERSION=2
-OUTLIB_PATCHLEVEL=2
+OUTLIB_PATCHLEVEL=1
 
 dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
 LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
@@ -434,18 +434,15 @@ if test "x$newhuff" = "xenabled"; then
   AC_DEFINE(USE_NEW_HUFFTABLE, 1, [ Define for new Huffman decoding scheme. ])
 fi
 
-integers=quality
+integers=fast
 AC_ARG_ENABLE(int-quality,
 [  --enable-int-quality=[yes/no] use rounding instead of fast truncation for integer output, where possible ],
 [
-  if test "x$enableval" = xno; then
-    integers=fast
+  if test "x$enableval" = xyes; then
+    integers=quality
+    AC_DEFINE(ACCURATE_ROUNDING,   1, [ Define to use proper rounding. ])
   fi
 ], [])
-
-if test $integers = quality; then
-  AC_DEFINE(ACCURATE_ROUNDING,   1, [ Define to use proper rounding. ])
-fi  
 
 int16=enabled
 AC_ARG_ENABLE(16bit,
