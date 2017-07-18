@@ -1,3 +1,15 @@
+:date 2017-07-18
+:by Thomas
+:release 1.25.3
+:title A better fix for an old issue
+.<p>Another quick bugfix-improvement release for you:</p>
+.<ul><li>libmpg123:
+.<ul><li>Better checks for xrpnt overflow in III_dequantize_sample() before each
+.   use, avoiding false positives and catching cases that were rendered
+.   harmless by alignment-enlarged buffers.
+.</li></ul>
+.</li></ul>
+
 :date 2017-07-11
 :by Thomas
 :release 1.25.2
