@@ -10,7 +10,7 @@
 .<ul>
 .<li>Better configure checks for i?86-apple-darwin (bug 253).</li>
 .<li>libmpg123:<ul>
-.<li>Prevent harmless call to memcpy(NULL, NULL, 0).</li>
+.<li>Prevent harmless call to <code>memcpy(NULL, NULL, 0)</code>.</li>
 .<li>More early checking of ID3v2 encoding values to avoid bogus text being
 .stored.</li>
 .</li></ul>
