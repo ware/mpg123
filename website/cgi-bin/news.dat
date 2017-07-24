@@ -5,7 +5,7 @@
 .<p>Some fuzzing using a fuzzer based on one Matthias Wenzel sent me 10 years ago
 .revealed two issues that are not serious in effect but needed fixing nevertheless.
 .After fixing those, I got the fuzzer running over 272000 cycles so far, mangling
-.about 6.7&nbsp;Mof input data each time, without further find.
+.about 6.7M of input data each time, without further find.
 .These are the changes in this release:</p>
 .<ul>
 .<li>Better configure checks for i?86-apple-darwin (bug 253).</li>
