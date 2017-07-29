@@ -15,6 +15,10 @@
 .stored.</li>
 .</li></ul>
 .</ul>
+.<p><strong>Update:</strong> Someone reported an invalid read fixed by the ID3v2 changes
+.as <a href="https://nvd.nist.gov/vuln/detail/CVE-2017-9545">CVE-2017-9545</a>. I do not
+.recall being told myself, but whatever. Just use the updated version, OK?
+.For a patch to back-port look at the difference of id3.c between 1.25.3 and 1.25.4.</p>
 
 :date 2017-07-18
 :by Thomas
