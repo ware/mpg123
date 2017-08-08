@@ -9,7 +9,7 @@
 .as <a href="/bugs/254">bug 254</a>.
 .Upgrade on 32 bit platforms highly recommened, of course. We are still not
 .talking about something nasty like code injection, but possible denial of
-.service, although it was only recently discovered via fuzzing.
+.service, although it was only recently discovered by the AddressSanitizer.
 .</p>
 
 :date 2017-07-24
