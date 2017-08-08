@@ -704,7 +704,6 @@ int parse_new_id3(mpg123_handle *fr, unsigned long first4bytes)
 		,1) \
 	)
 	/* id3v2.3 does not store synchsafe frame sizes, but synchsafe tag size - doh! */
-	/* Remember: bytes_to_long() can yield ULONG_MAX on 32 bit platforms! */
 	#define bytes_to_long(buf,res) \
 	( \
 		major == 3 ? \
@@ -773,25 +772,16 @@ int parse_new_id3(mpg123_handle *fr, unsigned long first4bytes)
 			if((ret2 = fr->rd->read_frame_body(fr,tagdata,length)) > 0)
 			{
 				unsigned long tagpos = 0;
-				/* bytes of frame title and of framesize value */
-				unsigned int head_part = fr->id3v2.version > 2 ? 4 : 3;
-				unsigned int flag_part = fr->id3v2.version > 2 ? 2 : 0;
-				/* The amount of bytes that are unconditionally read for each frame: */
-				/* ID, size, flags. */
-				unsigned int framebegin = head_part+head_part+flag_part;
 				debug1("ID3v2: have read at all %lu bytes for the tag now", (unsigned long)length+6);
 				/* going to apply strlen for strings inside frames, make sure that it doesn't overflow! */
 				tagdata[length] = 0;
 				if(flags & EXTHEAD_FLAG)
 				{
 					debug("ID3v2: skipping extended header");
-					if(!bytes_to_long(tagdata, tagpos) || tagpos >= length)
+					if(!bytes_to_long(tagdata, tagpos))
 					{
 						ret = 0;
-						if(NOQUIET)
-							error4( "Bad (non-synchsafe/too large) tag offset:"
-								"0x%02x%02x%02x%02x"
-							,	tagdata[0], tagdata[1], tagdata[2], tagdata[3] );
+						if(NOQUIET) error4("Bad (non-synchsafe) tag offset: 0x%02x%02x%02x%02x", tagdata[0], tagdata[1], tagdata[2], tagdata[3]);
 					}
 				}
 				if(ret > 0)
@@ -799,12 +789,13 @@ int parse_new_id3(mpg123_handle *fr, unsigned long first4bytes)
 					char id[5];
 					unsigned long framesize;
 					unsigned long fflags; /* need 16 bits, actually */
+					/* bytes of frame title and of framesize value */
+					int head_part = fr->id3v2.version > 2 ? 4 : 3;
+					int flag_part = fr->id3v2.version > 2 ? 2 : 0;
 					id[4] = 0;
-					/* Pos now advanced after ext head, now a frame has to follow. */
-					/* Note: tagpos <= length, which is 28 bit integer, so both */
-					/* far away from overflow for adding known small values. */
+					/* pos now advanced after ext head, now a frame has to follow */
 					/* I want to read at least one full header now. */
-					while(length >= tagpos+framebegin)
+					while(tagpos <= length-head_part-head_part-flag_part)
 					{
 						int i = 0;
 						unsigned long pos = tagpos;
@@ -837,7 +828,12 @@ int parse_new_id3(mpg123_handle *fr, unsigned long first4bytes)
 								break;
 							}
 							if(VERBOSE3) fprintf(stderr, "Note: ID3v2 %s frame of size %lu\n", id, framesize);
-							tagpos += head_part;
+							tagpos += head_part + framesize; /* the important advancement in whole tag */
+							if(tagpos > length-flag_part)
+							{
+								if(NOQUIET) error("Whoa! ID3v2 frame claims to be larger than the whole rest of the tag.");
+								break;
+							}
 							pos += head_part;
 							if(fr->id3v2.version > 2)
 							{
@@ -846,13 +842,6 @@ int parse_new_id3(mpg123_handle *fr, unsigned long first4bytes)
 								tagpos += 2;
 							}
 							else fflags = 0;
-
-							if(length - tagpos < framesize)
-							{
-								if(NOQUIET) error("Whoa! ID3v2 frame claims to be larger than the whole rest of the tag.");
-								break;
-							}
-							tagpos += framesize; /* the important advancement in whole tag */
 							/* for sanity, after full parsing tagpos should be == pos */
 							/* debug4("ID3v2: found %s frame, size %lu (as bytes: 0x%08lx), flags 0x%016lx", id, framesize, framesize, fflags); */
 							/* %0abc0000 %0h00kmnp */
