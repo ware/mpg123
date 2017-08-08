@@ -1,3 +1,17 @@
+:date 2017-08-08
+:by Thomas
+:release 1.25.5
+:title More overflow fixing
+.<p>
+.There was a longer-lasting buffer read overflow in the ID3 parser because
+.code added in 2008 did not take care of possible integer overflow in an
+.addition on platforms where long is 32 bits wide. This has been reported
+.as <a href="/bugs/254">bug 254</a>.
+.Upgrade on 32 bit platforms highly recommened, of course. We are still not
+.talking about something nasty like code injection, but possible denial of
+.service, although it was only recently discovered via fuzzing.
+.</p>
+
 :date 2017-07-24
 :by Thomas
 :release 1.25.4
