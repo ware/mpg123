@@ -1,3 +1,14 @@
+:date 2017-08-11
+:by Thomas
+:release 1.25.6
+:title An overflow fix, this time for layer II
+.<ul>
+.<li>Hotfix for <a href="/bugs/255">bug 255</a>:
+.  Overflow reading frame data bits in layer II decoding.
+.  Now, all-zero data is returned if the frame data is exhausted. This might
+.  have a slight impact on performance, but not easily measurable so far.
+.</li>
+
 :date 2017-08-08
 :by Thomas
 :release 1.25.5
