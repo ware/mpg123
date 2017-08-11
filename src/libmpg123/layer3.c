@@ -813,7 +813,6 @@ static int III_dequantize_sample(mpg123_handle *fr, real xr[SBLIMIT][SSLIMIT],in
 				if( (!mc) )
 				{
 					mc    = *m++;
-//fprintf(stderr, "%i setting xrpnt = xr + %i (%ld)\n", __LINE__, *m, xrpnt-(real*)xr);
 					xrpnt = ((real *) xr) + (*m++);
 					lwin  = *m++;
 					cb    = *m++;
@@ -943,7 +942,6 @@ static int III_dequantize_sample(mpg123_handle *fr, real xr[SBLIMIT][SSLIMIT],in
 					if(!mc)
 					{
 						mc = *m++;
-//fprintf(stderr, "%i setting xrpnt = xr + %i (%ld)\n", __LINE__, *m, xrpnt-(real*)xr);
 						xrpnt = ((real *) xr) + (*m++);
 						lwin = *m++;
 						cb = *m++;
