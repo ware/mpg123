@@ -64,8 +64,7 @@ struct parameter param = {
   NULL,   /* output device */
   0,      /* destination (headphones, ...) */
 #ifdef HAVE_TERMIOS
-  FALSE,  /* term control */
-  TRUE,   /* term visuals */
+  FALSE , /* term control */
   MPG123_TERM_USR1,
   MPG123_TERM_USR2,
 #endif
@@ -533,7 +532,6 @@ topt opts[] = {
 	{'f', "scale",       GLO_ARG | GLO_LONG, 0, &param.outscale,   0},
 	{'n', "frames",      GLO_ARG | GLO_LONG, 0, &param.frame_number,  0},
 #ifdef HAVE_TERMIOS
-	{0, "no-visual",     GLO_INT,  0, &param.term_visual, FALSE},
 	{'C', "control",     GLO_INT,  0, &param.term_ctrl, TRUE},
 	{0, "no-control",    GLO_INT,  0, &param.term_ctrl, FALSE},
 	{0,   "ctrlusr1",    GLO_ARG | GLO_CHAR, 0, &param.term_usr1, 0},
@@ -850,7 +848,7 @@ int play_frame(void)
 			out123_pause(ao);
 		}
 	}
-	if((param.verbose > 3 || new_header) && !param.quiet)
+	if(new_header && !param.quiet)
 	{
 		new_header = FALSE;
 		fprintf(stderr, "\n");
@@ -1592,8 +1590,6 @@ static void long_usage(int err)
 	#ifdef HAVE_TERMIOS
 	fprintf(o," -C     --control          enable terminal control keys (else auto detect)\n");
 	fprintf(o,"        --no-control       disable terminal control keys (disable auto detect)\n");
-	fprintf(o,"        --no-visual        disable visual enhancements in output (hide cursor,\n"
-	          "                           reverse video), alternative to TERM=dumb\n");
 	fprintf(o,"        --ctrlusr1 <c>     control key (characer) to map to SIGUSR1\n");
 	fprintf(o,"                           (default is for stop/start)\n");
 	fprintf(o,"        --ctrlusr2 <c>     control key (characer) to map to SIGUSR2\n");
