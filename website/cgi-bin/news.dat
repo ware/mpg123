@@ -1,3 +1,27 @@
+:date 2017-09-25
+:by Thomas
+:release 1.25.7
+:title Behavioural adjustment and more fixings.
+.<ul>
+.<li>mpg123:
+.<ul><li>Do not play with cursor and inverse video for progress bar
+.when TERM=dumb.</li>
+.<li>Fix parsing of host port for numerical IPv6 addresses (just did
+.not work before, only for textual host names).</li>
+.</ul></li>
+.<li>libmpg123:
+.<ul>
+.<li>Proper fix for the xrpnt overflow problems by correctly
+.initialising certain tables for MPEG 2.x layer III. The checks that
+.catch the resulting overflow are still in place, but likely superfluous
+.now. Note that this means certain valid files would have been misdecoded
+.before, if anyone actually produced them. Thanks to Robert Hegemann for
+.the fix!</li>
+.<li>Silently handle granules with part2_3_length == 0, but
+.scalefac_compress != 0 (ignore the latter).</li>
+.</ul></li>
+.</ul>
+
 :date 2017-08-11
 :by Thomas
 :release 1.25.6
