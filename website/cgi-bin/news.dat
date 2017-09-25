@@ -17,8 +17,8 @@
 .now. Note that this means certain valid files would have been misdecoded
 .before, if anyone actually produced them. Thanks to Robert Hegemann for
 .the fix!</li>
-.<li>Silently handle granules with part2_3_length == 0, but
-.scalefac_compress != 0 (ignore the latter).</li>
+.<li>Silently handle granules with <code>part2_3_length == 0</code>, but
+.<code>scalefac_compress != 0</code> (ignore the latter).</li>
 .</ul></li>
 .</ul>
 
