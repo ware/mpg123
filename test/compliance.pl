@@ -124,7 +124,6 @@ sub tester
 			$commandline .= quotemeta($_);
 		}
 		$commandline .= " 2>/dev/null </dev/null | $conv | $rms ".quotemeta($double)." 2>/dev/null";
-print STDERR "running $commandline\n";
 		system($commandline);
 		if($? == -1)
 		{
