@@ -408,9 +408,6 @@ static int check_lame_tag(mpg123_handle *fr)
 		lame_offset += 3; /* 24 in */
 		if(VERBOSE3) fprintf(stderr, "Note: Encoder delay = %i; padding = %i\n"
 		,	(int)pad_in, (int)pad_out);
-		/* Store even if libmpg123 does not do gapless decoding itself. */
-		fr->enc_delay   = (int)pad_in;
-		fr->enc_padding = (int)pad_out;
 		#ifdef GAPLESS
 		if(fr->p.flags & MPG123_GAPLESS)
 		frame_gapless_init(fr, fr->track_frames, pad_in, pad_out);
@@ -461,7 +458,8 @@ static int halfspeed_do(mpg123_handle *fr)
 			debug("repeat!");
 			fr->to_decode = fr->to_ignore = TRUE;
 			--fr->halfphase;
-			set_pointer(fr, 0, 0);
+			fr->bitindex = 0;
+			fr->wordpointer = (unsigned char *) fr->bsbuf;
 			if(fr->lay == 3) memcpy (fr->bsbuf, fr->ssave, fr->ssize);
 			if(fr->error_protection) fr->crc = getbits(fr, 16); /* skip crc */
 			return 1;
@@ -593,8 +591,8 @@ init_resync:
 		debug2("fr->firsthead: %08lx, audio_start: %li", fr->firsthead, (long int)fr->audio_start);
 	}
 
-	set_pointer(fr, 0, 0);
-
+  fr->bitindex = 0;
+  fr->wordpointer = (unsigned char *) fr->bsbuf;
 	/* Question: How bad does the floating point value get with repeated recomputation?
 	   Also, considering that we can play the file or parts of many times. */
 	if(++fr->mean_frames != 0)
@@ -862,13 +860,6 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead, int *freeforma
 				fr->framesize /= freqs[fr->sampling_frequency]<<(fr->lsf);
 				fr->framesize = fr->framesize + fr->padding - 4;
 			}
-			if(fr->framesize < fr->ssize)
-			{
-				if(NOQUIET)
-					error2( "Frame smaller than mandatory side info (%i < %i)!"
-					,	fr->framesize, fr->ssize );
-				return PARSE_BAD;
-			}
 		break;
 #endif 
 		default:
@@ -885,45 +876,39 @@ static int decode_header(mpg123_handle *fr,unsigned long newhead, int *freeforma
 	return PARSE_GOOD;
 }
 
-/* Prepare for bit reading. Two stages:
-  0. Layers 1 and 2, side info for layer 3
-  1. Second call for possible bit reservoir for layer 3 part 2,3.
-     This overwrites side info needed for stage 0.
-
-  Continuing to read bits after layer 3 side info shall fail unless
-  set_pointer() is called to refresh things. 
-*/
-void set_pointer(mpg123_handle *fr, int part2, long backstep)
+void set_pointer(mpg123_handle *fr, long backstep)
 {
-	fr->bitindex = 0;
-	if(fr->lay == 3)
-	{
-		if(part2)
-		{
-			fr->wordpointer = fr->bsbuf + fr->ssize - backstep;
-			if(backstep)
-				memcpy( fr->wordpointer, fr->bsbufold+fr->fsizeold-backstep
-				,	backstep );
-			fr->bits_avail = (long)(fr->framesize - fr->ssize + backstep)*8;
-		}
-		else
-		{
-			fr->wordpointer = fr->bsbuf;
-			fr->bits_avail  = fr->ssize*8;
-		}
-	}
-	else
-	{
-		fr->wordpointer = fr->bsbuf;
-		fr->bits_avail  = fr->framesize*8;
-	}
+	fr->wordpointer = fr->bsbuf + fr->ssize - backstep;
+	if (backstep)
+	memcpy(fr->wordpointer,fr->bsbufold+fr->fsizeold-backstep,backstep);
+
+	fr->bitindex = 0; 
 }
 
 /********************************/
 
 double compute_bpf(mpg123_handle *fr)
 {
-	return (fr->framesize > 0) ? fr->framesize + 4.0 : 1.0;
+	double bpf;
+
+	switch(fr->lay) 
+	{
+		case 1:
+			bpf = tabsel_123[fr->lsf][0][fr->bitrate_index];
+			bpf *= 12000.0 * 4.0;
+			bpf /= freqs[fr->sampling_frequency] <<(fr->lsf);
+		break;
+		case 2:
+		case 3:
+			bpf = tabsel_123[fr->lsf][fr->lay-1][fr->bitrate_index];
+			bpf *= 144000;
+			bpf /= freqs[fr->sampling_frequency] << (fr->lsf);
+		break;
+		default:
+			bpf = 1.0;
+	}
+
+	return bpf;
 }
 
 int attribute_align_arg mpg123_spf(mpg123_handle *mh)

@@ -224,7 +224,6 @@ struct mpg123_handle_struct
 
 	/* bitstream info; bsi */
 	int bitindex;
-	long bits_avail;
 	unsigned char *wordpointer;
 	/* temporary storage for getbits stuff */
 	unsigned long ultmp;
@@ -249,7 +248,7 @@ struct mpg123_handle_struct
 	int fsizeold;
 	int ssize;
 	unsigned int bitreservoir;
-	unsigned char bsspace[2][MAXFRAMESIZE+512+4]; /* MAXFRAMESIZE */
+	unsigned char bsspace[2][MAXFRAMESIZE+512]; /* MAXFRAMESIZE */
 	unsigned char *bsbuf;
 	unsigned char *bsbufold;
 	int bsnum;
@@ -296,8 +295,6 @@ struct mpg123_handle_struct
 #ifndef NO_ID3V2
 	mpg123_id3v2 id3v2;
 #endif
-	unsigned char *id3v2_raw;
-	size_t id3v2_size;
 #ifndef NO_ICY
 	struct icy_meta icy;
 #endif
@@ -336,11 +333,6 @@ struct mpg123_handle_struct
 	void *wrapperdata;
 	/* A callback used to properly destruct the wrapper data. */
 	void (*wrapperclean)(void*);
-	int enc_delay;
-	int enc_padding;
-#ifndef NO_MOREINFO
-	struct mpg123_moreinfo *pinfo;
-#endif
 };
 
 /* generic init, does not include dynamic buffers */
