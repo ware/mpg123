@@ -533,7 +533,6 @@ topt opts[] = {
 	{'f', "scale",       GLO_ARG | GLO_LONG, 0, &param.outscale,   0},
 	{'n', "frames",      GLO_ARG | GLO_LONG, 0, &param.frame_number,  0},
 #ifdef HAVE_TERMIOS
-	{0, "no-visual",     GLO_INT,  0, &param.term_visual, FALSE},
 	{'C', "control",     GLO_INT,  0, &param.term_ctrl, TRUE},
 	{0, "no-control",    GLO_INT,  0, &param.term_ctrl, FALSE},
 	{0,   "ctrlusr1",    GLO_ARG | GLO_CHAR, 0, &param.term_usr1, 0},
@@ -655,6 +654,7 @@ int open_track(char *fname)
 #ifdef WIN32
 		_setmode(STDIN_FILENO, _O_BINARY);
 #endif
+		return open_track_fd();
 	}
 	else if (!strncmp(fname, "http://", 7)) /* http stream */
 	{
@@ -700,7 +700,7 @@ int open_track(char *fname)
 
 	debug("OK... going to finally open.");
 	/* Now hook up the decoder on the opened stream or the file. */
-	if(filept > -1)
+	if(network_sockets_used) 
 	{
 		return open_track_fd();
 	}
@@ -814,11 +814,9 @@ int play_frame(void)
 	/* Special actions and errors. */
 	if(mc != MPG123_OK)
 	{
-		if(mc == MPG123_ERR || mc == MPG123_DONE || mc == MPG123_NEED_MORE)
+		if(mc == MPG123_ERR || mc == MPG123_DONE)
 		{
-			if(!param.quiet && mc == MPG123_ERR) error1("...in decoding next frame: %s", mpg123_strerror(mh));
-			if(!param.quiet && mc == MPG123_NEED_MORE)
-				error("The decoder expected more. File cut off early?");
+			if(mc == MPG123_ERR) error1("...in decoding next frame: %s", mpg123_strerror(mh));
 			return 0;
 		}
 		if(mc == MPG123_NO_SPACE)
@@ -851,7 +849,7 @@ int play_frame(void)
 			out123_pause(ao);
 		}
 	}
-	if((param.verbose > 3 || new_header) && !param.quiet)
+	if(new_header && !param.quiet)
 	{
 		new_header = FALSE;
 		fprintf(stderr, "\n");
@@ -1593,8 +1591,6 @@ static void long_usage(int err)
 	#ifdef HAVE_TERMIOS
 	fprintf(o," -C     --control          enable terminal control keys (else auto detect)\n");
 	fprintf(o,"        --no-control       disable terminal control keys (disable auto detect)\n");
-	fprintf(o,"        --no-visual        disable visual enhancements in output (hide cursor,\n"
-	          "                           reverse video), alternative to TERM=dumb\n");
 	fprintf(o,"        --ctrlusr1 <c>     control key (characer) to map to SIGUSR1\n");
 	fprintf(o,"                           (default is for stop/start)\n");
 	fprintf(o,"        --ctrlusr2 <c>     control key (characer) to map to SIGUSR2\n");

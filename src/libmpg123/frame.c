@@ -64,7 +64,6 @@ static void frame_default_pars(mpg123_pars *mp)
 	mp->feedpool = 5; 
 	mp->feedbuffer = 4096;
 #endif
-	mp->freeformat_framesize = -1;
 }
 
 void frame_init(mpg123_handle *fr)
@@ -125,7 +124,6 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 #endif
 
 	fr->down_sample = 0; /* Initialize to silence harmless errors when debugging. */
-	fr->id3v2_raw = NULL;
 	frame_fixed_reset(fr); /* Reset only the fixed data, dynamic buffers are not there yet! */
 	fr->synth = NULL;
 	fr->synth_mono = NULL;
@@ -133,9 +131,6 @@ void frame_init_par(mpg123_handle *fr, mpg123_pars *mp)
 #ifdef FRAME_INDEX
 	fi_init(&fr->index);
 	frame_index_setup(fr); /* Apply the size setting. */
-#endif
-#ifndef NO_MOREINFO
-	fr->pinfo = NULL;
 #endif
 }
 
@@ -565,14 +560,7 @@ static void frame_fixed_reset(mpg123_handle *fr)
 #endif
 	fr->halfphase = 0; /* here or indeed only on first-time init? */
 	fr->error_protection = 0;
-	fr->freeformat_framesize = fr->p.freeformat_framesize;
-	fr->enc_delay = -1;
-	fr->enc_padding = -1;
-	memset(fr->id3buf, 0, sizeof(fr->id3buf));
-	if(fr->id3v2_raw)
-		free(fr->id3v2_raw);
-	fr->id3v2_raw = NULL;
-	fr->id3v2_size = 0;
+	fr->freeformat_framesize = -1;
 }
 
 static void frame_free_buffers(mpg123_handle *fr)
@@ -633,18 +621,6 @@ int attribute_align_arg mpg123_framedata(mpg123_handle *mh, unsigned long *heade
 	if(bodybytes != NULL) *bodybytes = mh->framesize;
 
 	return MPG123_OK;
-}
-
-int attribute_align_arg mpg123_set_moreinfo( mpg123_handle *mh
-,	struct mpg123_moreinfo *mi)
-{
-#ifndef NO_MOREINFO
-	mh->pinfo = mi;
-	return MPG123_OK;
-#else
-	mh->err = MPG123_MISSING_FEATURE;
-	return MPG123_ERR;
-#endif
 }
 
 /*
@@ -936,7 +912,7 @@ void frame_set_frameseek(mpg123_handle *fr, off_t fe)
 void frame_skip(mpg123_handle *fr)
 {
 #ifndef NO_LAYER3
-	if(fr->lay == 3) set_pointer(fr, 1, 512);
+	if(fr->lay == 3) set_pointer(fr, 512);
 #endif
 }
 

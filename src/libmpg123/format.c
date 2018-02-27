@@ -26,7 +26,6 @@
 */
 
 #include "mpg123lib_intern.h"
-#include "sample.h"
 #include "debug.h"
 
 /* static int chans[NUM_CHANNELS] = { 1 , 2 }; */
@@ -404,7 +403,7 @@ int attribute_align_arg mpg123_format(mpg123_handle *mh, long rate, int channels
 
 int attribute_align_arg mpg123_fmt(mpg123_pars *mp, long rate, int channels, int encodings)
 {
-	int ie, ic, ratei, r1, r2;
+	int ie, ic, ratei;
 	int ch[2] = {0, 1};
 	if(mp == NULL) return MPG123_BAD_PARS;
 	if(!(channels & (MPG123_MONO|MPG123_STEREO))) return MPG123_BAD_CHANNEL;
@@ -413,21 +412,10 @@ int attribute_align_arg mpg123_fmt(mpg123_pars *mp, long rate, int channels, int
 
 	if(!(channels & MPG123_STEREO)) ch[1] = 0;     /* {0,0} */
 	else if(!(channels & MPG123_MONO)) ch[0] = 1; /* {1,1} */
-	if(rate)
-	{
-		r1 = rate2num(mp, rate);
-		r2 = r1+1;
-	}
-	else
-	{
-		r1 = 0;
-		r2 = MPG123_RATES+1; /* including forced rate */
-	}
-	
-	if(r1 < 0) return MPG123_BAD_RATE;
+	ratei = rate2num(mp, rate);
+	if(ratei < 0) return MPG123_BAD_RATE;
 
 	/* now match the encodings */
-	for(ratei = r1; ratei < r2; ++ratei)
 	for(ic = 0; ic < 2; ++ic)
 	{
 		for(ie = 0; ie < MPG123_ENCODINGS; ++ie)
@@ -496,17 +484,37 @@ off_t outblock_bytes(mpg123_handle *fr, off_t s)
 }
 
 #ifndef NO_32BIT
-
 /* Remove every fourth byte, facilitating conversion from 32 bit to 24 bit integers.
    This has to be aware of endianness, of course. */
 static void chop_fourth_byte(struct outbuffer *buf)
 {
 	unsigned char *wpos = buf->data;
 	unsigned char *rpos = buf->data;
-	size_t blocks = buf->fill/4;
-	size_t i;
-	for(i=0; i<blocks; ++i,wpos+=3,rpos+=4)
-		DROP4BYTE(wpos, rpos)
+#ifdef WORDS_BIGENDIAN
+	while((size_t) (rpos - buf->data + 4) <= buf->fill)
+	{
+		/* Really stupid: Copy, increment. Byte per byte. */
+		*wpos = *rpos;
+		wpos++; rpos++;
+		*wpos = *rpos;
+		wpos++; rpos++;
+		*wpos = *rpos;
+		wpos++; rpos++;
+		rpos++; /* Skip the lowest byte (last). */
+	}
+#else
+	while((size_t) (rpos - buf->data + 4) <= buf->fill)
+	{
+		/* Really stupid: Copy, increment. Byte per byte. */
+		rpos++; /* Skip the lowest byte (first). */
+		*wpos = *rpos;
+		wpos++; rpos++;
+		*wpos = *rpos;
+		wpos++; rpos++;
+		*wpos = *rpos;
+		wpos++; rpos++;
+	}
+#endif
 	buf->fill = wpos-buf->data;
 }
 
@@ -518,7 +526,18 @@ static void conv_s32_to_u32(struct outbuffer *buf)
 	size_t count = buf->fill/sizeof(int32_t);
 
 	for(i=0; i<count; ++i)
-		usamples[i] = CONV_SU32(ssamples[i]);
+	{
+		/* Different strategy since we don't have a larger type at hand.
+			 Also watch out for silly +-1 fun because integer constants are signed in C90! */
+		if(ssamples[i] >= 0)
+		usamples[i] = (uint32_t)ssamples[i] + 2147483647+1;
+		/* The smallest value goes zero. */
+		else if(ssamples[i] == ((int32_t)-2147483647-1))
+		usamples[i] = 0;
+		/* Now -value is in the positive range of signed int ... so it's a possible value at all. */
+		else
+		usamples[i] = (uint32_t)2147483647+1 - (uint32_t)(-ssamples[i]);
+	}
 }
 
 #endif
@@ -540,7 +559,10 @@ static void conv_s16_to_u16(struct outbuffer *buf)
 	size_t count = buf->fill/sizeof(int16_t);
 
 	for(i=0; i<count; ++i)
-		usamples[i] = CONV_SU16(ssamples[i]);
+	{
+		long tmp = (long)ssamples[i]+32768;
+		usamples[i] = (uint16_t)tmp;
+	}
 }
 
 #ifndef NO_REAL
@@ -596,18 +618,6 @@ static void conv_s16_to_s32(struct outbuffer *buf)
 #endif
 #endif
 
-#include "swap_bytes_impl.h"
-
-void swap_endian(struct outbuffer *buf, int block)
-{
-	size_t count;
-
-	if(block >= 2)
-	{
-		count = buf->fill/(unsigned int)block;
-		swap_bytes(buf->data, (size_t)block, count);
-	}
-}
 
 void postprocess_buffer(mpg123_handle *fr)
 {
@@ -669,18 +679,5 @@ void postprocess_buffer(mpg123_handle *fr)
 		}
 	break;
 #endif
-	}
-	if(fr->p.flags & MPG123_FORCE_ENDIAN)
-	{
-		if(
-#ifdef WORDS_BIGENDIAN
-			!(
-#endif
-				fr->p.flags & MPG123_BIG_ENDIAN
-#ifdef WORDS_BIGENDIAN
-			)
-#endif
-		)
-			swap_endian(&fr->buffer, mpg123_encsize(fr->af.encoding));
 	}
 }
