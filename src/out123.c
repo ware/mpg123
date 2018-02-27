@@ -1,35 +1,20 @@
 /*
 	out123: simple program to stream data to an audio output device
 
-	copyright 1995-2018 by the mpg123 project,
-	free software under the terms of the LGPL 2.1
+	copyright 1995-2016 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
-
 	initially written by Thomas Orgis (extracted from mpg123.c)
 
-	This is a stripped down mpg123 that only uses libout123 to write standard
-	input to an audio device. Of course, it got some enhancements with the
-	advent of libsyn123.
-
-	Please bear in mind that the code started out as a nasty hack on a very
-	old piece made out of nasty hacks and plain ugly code. Some nastiness
-	(like lax parameter checking) even serves a purpose: Test the robustness
-	of our libraries in catching bad caller behaviour.
+	This is a stripped down mpg123 that only uses libout123 to write standard input
+	to an audio device.
 
 	TODO: Add basic parsing of WAV headers to be able to pipe in WAV files, especially
 	from something like mpg123 -w -.
-
-	TODO: Add option for phase shift between channels (delaying the second one).
-	This might be useful with generated signals, to locate left/right speakers
-	or just generally enhance the experience ... compensating for speaker locations.
-	This also means the option of mixing, channel attentuation. This is not
-	too hard to implement and might be useful for debugging outputs.
 */
 
 #define ME "out123"
 #include "config.h"
 #include "compat.h"
-#include <ctype.h>
 #if WIN32
 #include "win32_support.h"
 #endif
@@ -53,7 +38,7 @@
 #include "sysutil.h"
 #include "getlopt.h"
 
-#include "syn123.h"
+#include "waves.h"
 
 #include "debug.h"
 
@@ -77,14 +62,10 @@ static int quiet = FALSE;
 static FILE* input = NULL;
 static char *encoding_name = NULL;
 static int  encoding = MPG123_ENC_SIGNED_16;
-static char *inputenc_name = NULL;
-static int  inputenc = 0;
 static int  channels = 2;
-static int  inputch  = 0;
 static long rate     = 44100;
 static char *driver = NULL;
 static char *device = NULL;
-int also_stdout = FALSE;
 size_t buffer_kb = 0;
 static int realtime = FALSE;
 #ifdef HAVE_WINDOWS_H
@@ -98,37 +79,28 @@ static const char *name = NULL; /* Let the out123 library choose "out123". */
 static double device_buffer; /* output device buffer */
 long timelimit = -1;
 off_t offset = 0;
-int do_clip = FALSE;
 
 char *wave_patterns = NULL;
 char *wave_freqs    = NULL;
 char *wave_phases   = NULL;
-char *wave_direction = NULL;
-const char *signal_source = "file";
 /* Default to around 2 MiB memory for the table. */
 long wave_limit     = 300000;
-int pink_rows = 0;
-double geiger_activity = 17;
 
 size_t pcmblock = 1152; /* samples (pcm frames) we treat en bloc */
 /* To be set after settling format. */
 size_t pcmframe = 0;
-size_t pcminframe = 0;
 unsigned char *audio = NULL;
-unsigned char *inaudio = NULL;
-char *mixmat_string = NULL;
-double *mixmat = NULL;
 
-// Option to play some oscillatory test signals.
-// Also used for conversions.
-syn123_handle *waver = NULL;
-int generate = FALSE; // Wheter to use the syn123 generator.
+/* Option to play some oscillatory test signals. */
+struct wave_table *waver = NULL;
 
 out123_handle *ao = NULL;
 char *cmd_name = NULL;
 /* ThOr: pointers are not TRUE or FALSE */
 char *equalfile = NULL;
 int fresh = TRUE;
+
+size_t bufferblock = 4096;
 
 int OutputDescriptor;
 
@@ -176,10 +148,8 @@ static void safe_exit(int code)
 	/* It's ugly... but let's just fix this still-reachable memory chunk of static char*. */
 	split_dir_file("", &dummy, &dammy);
 	if(fullprogname) free(fullprogname);
-	if(mixmat) free(mixmat);
-	if(inaudio && inaudio != audio) free(inaudio);
 	if(audio) free(audio);
-	if(waver) syn123_del(waver);
+	wave_table_del(waver);
 	exit(code);
 }
 
@@ -190,17 +160,7 @@ static void check_fatal_output(int code)
 		if(!quiet)
 			error2( "out123 error %i: %s"
 			,	out123_errcode(ao), out123_strerror(ao) );
-		safe_exit(133);
-	}
-}
-
-static void check_fatal_syn(int code)
-{
-	if(code)
-	{
-		if(!quiet)
-			merror("syn123 error %i: %s", code, syn123_strerror(code));
-		safe_exit(132);
+		safe_exit(code);
 	}
 }
 
@@ -308,7 +268,8 @@ static void set_out_stdout(char *arg)
 
 static void set_out_stdout1(char *arg)
 {
-	also_stdout = TRUE;
+	driver = "raw";
+	device = NULL;
 }
 
 #if !defined (HAVE_SCHED_SETSCHEDULER) && !defined (HAVE_WINDOWS_H)
@@ -399,16 +360,9 @@ static void test_format(char *arg)
 
 static void test_encodings(char *arg)
 {
-	int encs, enc_count, *enc_codes, i;
-
+	int encs;
 	encs = getencs();
-	enc_count = out123_enc_list(&enc_codes);
-	for(i=0;i<enc_count;++i)
-	{
-		if((encs & enc_codes[i]) == enc_codes[i])
-			printf("%s\n", out123_enc_name(enc_codes[i]));
-	}
-	free(enc_codes);
+	printf("%i\n", encs);
 	exit(!encs);
 }
 
@@ -451,24 +405,6 @@ static void query_format(char *arg)
 	exit(0);
 }
 
-void set_wave_freqs(char *arg)
-{
-	signal_source = "wave";
-	wave_freqs = arg;
-}
-
-void set_pink_rows(char *arg)
-{
-	signal_source = "pink";
-	pink_rows = atoi(arg);
-}
-
-void set_geiger_act(char *arg)
-{
-	signal_source = "geiger";
-	geiger_activity = atof(arg);
-}
-
 /* Please note: GLO_NUM expects point to LONG! */
 /* ThOr:
  *  Yeah, and despite that numerous addresses to int variables were 
@@ -487,10 +423,7 @@ topt opts[] = {
 	{'m',  "mono",       GLO_INT,  0, &channels, 1},
 	{0,   "stereo",      GLO_INT,  0, &channels, 2},
 	{'c', "channels",    GLO_ARG | GLO_INT,  0, &channels, 0},
-	{'C', "inputch",     GLO_ARG | GLO_INT,  0, &inputch, 0},
-	{'M', "mix",         GLO_ARG | GLO_CHAR, 0, &mixmat_string, 0},
 	{'r', "rate",        GLO_ARG | GLO_LONG, 0, &rate,  0},
-	{0,   "clip",        GLO_INT,  0, &do_clip, TRUE},
 	{0,   "headphones",  0,                  set_output_h, 0,0},
 	{0,   "speaker",     0,                  set_output_s, 0,0},
 	{0,   "lineout",     0,                  set_output_l, 0,0},
@@ -520,7 +453,6 @@ topt opts[] = {
 	{0 , "longhelp" ,        0,  want_long_usage, 0,      0 },
 	{0 , "version" ,         0,  give_version, 0,         0 },
 	{'e', "encoding", GLO_ARG|GLO_CHAR, 0, &encoding_name, 0},
-	{'E', "inputenc", GLO_ARG|GLO_CHAR, 0, &inputenc_name, 0}, 
 	{0, "list-encodings", 0, list_encodings, 0, 0 },
 	{0, "test-format", 0, test_format, 0, 0 },
 	{0, "test-encodings", 0, test_encodings, 0, 0},
@@ -528,15 +460,10 @@ topt opts[] = {
 	{0, "name", GLO_ARG|GLO_CHAR, 0, &name, 0},
 	{0, "devbuffer", GLO_ARG|GLO_DOUBLE, 0, &device_buffer, 0},
 	{0, "timelimit", GLO_ARG|GLO_LONG, 0, &timelimit, 0},
-	{0, "source", GLO_ARG|GLO_CHAR, 0, &signal_source, 0},
 	{0, "wave-pat", GLO_ARG|GLO_CHAR, 0, &wave_patterns, 0},
-	{0, "wave-freq", GLO_ARG|GLO_CHAR, set_wave_freqs, 0, 0},
+	{0, "wave-freq", GLO_ARG|GLO_CHAR, 0, &wave_freqs, 0},
 	{0, "wave-phase", GLO_ARG|GLO_CHAR, 0, &wave_phases, 0},
-	{0, "wave-direction", GLO_ARG|GLO_CHAR, 0, &wave_direction, 0},
 	{0, "wave-limit", GLO_ARG|GLO_LONG, 0, &wave_limit, 0},
-	{0, "genbuffer", GLO_ARG|GLO_LONG, 0, &wave_limit, 0},
-	{0, "pink-rows", GLO_ARG|GLO_INT, set_pink_rows, 0, 0},
-	{0, "geiger-activity", GLO_ARG|GLO_DOUBLE, set_geiger_act, 0, 0},
 	{0, 0, 0, 0, 0, 0}
 };
 
@@ -566,11 +493,7 @@ static char *mytok(char **choppy)
 		++(*choppy);
 	/* Another token follows if we found a separator. */
 	if(**choppy == ',')
-	{
 		*(*choppy)++ = 0;
-		while(isspace(**choppy))
-			*(*choppy)++ = 0;
-	}
 	else
 		*choppy = NULL; /* Nothing left. */
 	return tok;
@@ -581,72 +504,16 @@ static void setup_wavegen(void)
 	size_t count = 0;
 	size_t i;
 	double *freq = NULL;
-	double *freq_real = NULL;
 	double *phase = NULL;
-	int *backwards = NULL;
-	int *id = NULL;
-	int synerr = 0;
-	size_t common = 0;
+	const char **pat = NULL;
 
-	if(!generate)
-		wave_limit = 0;
-	waver = syn123_new(rate, inputch, inputenc, wave_limit, &synerr);
-	check_fatal_syn(synerr);
-	if(!waver)
-		safe_exit(132);
-	// At least have waver handy for conversions.
-	if(!generate)
-		return;
-
-	if(!strcmp(signal_source, "pink"))
-	{
-		synerr = syn123_setup_pink(waver, pink_rows, &common);
-		if(synerr)
-		{
-			if(!quiet)
-				merror("setting up pink noise generator: %s\n", syn123_strerror(synerr));
-			safe_exit(132);
-		}
-		if(verbose)
-		{
-			fprintf( stderr
-			,	ME ": pink noise with %i generator rows (0=internal default)\n"
-			,	pink_rows );
-		}
-		goto setup_waver_end;
-	}
-	else if(!strcmp(signal_source, "geiger"))
-	{
-		synerr = syn123_setup_geiger(waver, geiger_activity, &common);
-		if(synerr)
-		{
-			if(!quiet)
-				merror("setting up geiger generator: %s\n", syn123_strerror(synerr));
-			safe_exit(132);
-		}
-		if(verbose)
-		{
-			fprintf(stderr, ME ": geiger with actvity %g\n", geiger_activity);
-		}
-		goto setup_waver_end;
-	}
-	else if(strcmp(signal_source, "wave"))
-	{
-		if(!quiet)
-			merror("unknown signal source: %s", signal_source);
-		safe_exit(132);
-	}
-
-	// The big default code block is for wave setup.
-	// Exceptions jump over it.
 	if(wave_freqs)
 	{
 		char *tok;
 		char *next;
 		count = mytok_count(wave_freqs);
 		freq = malloc(sizeof(double)*count);
-		freq_real = malloc(sizeof(double)*count);
-		if(!freq || !freq_real){ error("OOM!"); safe_exit(1); }
+		if(!freq){ error("OOM!"); safe_exit(1); }
 		next = wave_freqs;
 		for(i=0; i<count; ++i)
 		{
@@ -658,26 +525,22 @@ static void setup_wavegen(void)
 			else
 				freq[i] = 0;
 		}
-		memcpy(freq_real, freq, sizeof(double)*count);
 	}
+	else return;
 
 	if(count && wave_patterns)
 	{
 		char *tok;
 		char *next = wave_patterns;
-		id = malloc(sizeof(int)*count);
-		if(!id){ error("OOM!"); safe_exit(1); }
+		pat = malloc(sizeof(char*)*count);
+		if(!pat){ error("OOM!"); safe_exit(1); }
 		for(i=0; i<count; ++i)
 		{
 			tok = mytok(&next);
 			if((tok && *tok) || i==0)
-			{
-				id[i] = syn123_wave_id(tok);
-				if(id[i] < 0)
-					fprintf(stderr, "Warning: bad wave pattern: %s\n", tok);
-			}
+				pat[i] = tok;
 			else
-				id[i] = id[i-1];
+				pat[i] = pat[i-1];
 		}
 	}
 
@@ -686,8 +549,7 @@ static void setup_wavegen(void)
 		char *tok;
 		char *next = wave_phases;
 		phase = malloc(sizeof(double)*count);
-		backwards = malloc(sizeof(int)*count);
-		if(!phase || !backwards){ error("OOM!"); safe_exit(1); }
+		if(!phase){ error("OOM!"); safe_exit(1); }
 		for(i=0; i<count; ++i)
 		{
 			tok = mytok(&next);
@@ -697,67 +559,33 @@ static void setup_wavegen(void)
 				phase[i] = phase[i-1];
 			else
 				phase[i] = 0;
-			if(phase[i] < 0)
-			{
-				phase[i] *= -1;
-				backwards[i] = TRUE;
-			}
-			else
-				backwards[i] = FALSE;
 		}
 	}
 
-	if(count && wave_direction)
+	waver = wave_table_new( rate, channels, encoding, count, freq, pat, phase
+	,	(size_t)wave_limit );
+	if(!waver)
 	{
-		char *tok;
-		char *next = wave_direction;
-		if(!backwards)
-			backwards = malloc(sizeof(int)*count);
-		if(!backwards){ error("OOM!"); safe_exit(1); }
-		for(i=0; i<count; ++i)
-		{
-			tok = mytok(&next);
-			if(tok && *tok)
-				backwards[i] = atof(tok) < 0 ? TRUE : FALSE;
-			else if(i)
-				backwards[i] = backwards[i-1];
-			else
-				backwards[i] = FALSE;
-		}
-	}
-
-	synerr = syn123_setup_waves( waver, count
-	,	id, freq_real, phase, backwards, &common );
-	if(synerr)
-	{
-		if(!quiet)
-			merror("setting up wave generator: %s\n", syn123_strerror(synerr));
+		error("Cannot set up wave generator.");
 		safe_exit(132);
 	}
+
 	if(verbose)
 	{
-		if(count) for(i=0; i<count; ++i)
-			fprintf( stderr, ME ": wave %" SIZE_P ": %s @ %g Hz (%g Hz) p %g\n"
+		fprintf(stderr, "wave table of %" SIZE_P " samples\n", waver->samples);
+		/* TODO: There is a crash here! pat being optimised away ... */
+		for(i=0; i<count; ++i)
+			fprintf( stderr, "wave %" SIZE_P ": %s @ %g Hz (%g Hz) p %g\n"
 			,	i
-			,	syn123_wave_name(id ? id[i] : SYN123_WAVE_SINE)
-			,	freq[i], freq_real[i]
+			,	(pat && pat[i]) ? pat[i] : wave_pattern_default
+			,	freq[i], waver->freq[i]
 			,	phase ? phase[i] : 0 );
-		else
-			fprintf(stderr, ME ": default sine wave\n");
 	}
 
-setup_waver_end:
-	if(verbose)
-	{
-		if(common)
-			fprintf(stderr, ME ": periodic signal table of %" SIZE_P " samples\n", common);
-		else
-			fprintf(stderr, ME ": live signal generation\n");
-	}
 	if(phase)
 		free(phase);
-	if(id)
-		free(id);
+	if(pat)
+		free(pat);
 	if(freq)
 		free(freq);
 }
@@ -767,7 +595,6 @@ int play_frame(void)
 {
 	size_t got_samples;
 	size_t get_samples = pcmblock;
-	debug("play_frame");
 	if(timelimit >= 0)
 	{
 		if(offset >= timelimit)
@@ -775,42 +602,21 @@ int play_frame(void)
 		else if(timelimit < offset+get_samples)
 			get_samples = (off_t)timelimit-offset;
 	}
-	if(generate)
-		got_samples = syn123_read(waver, inaudio, get_samples*pcminframe)/pcminframe;
+	if(waver)
+		got_samples = wave_table_extract(waver, audio, get_samples);
 	else
-		got_samples = fread(inaudio, pcminframe, get_samples, input);
+		got_samples = fread(audio, pcmframe, get_samples, input);
 	/* Play what is there to play (starting with second decode_frame call!) */
 	if(got_samples)
 	{
-		errno = 0;
-		size_t got_bytes = 0;
-		if(inaudio != audio)
+		size_t got_bytes = pcmframe * got_samples;
+		if(out123_play(ao, audio, got_bytes) < (int)got_bytes)
 		{
-			if(mixmat)
+			if(!quiet)
 			{
-				check_fatal_syn(syn123_mix( audio, encoding, channels
-				,	inaudio, inputenc, inputch, mixmat, got_samples, waver ));
-				got_bytes = pcmframe * got_samples;
-			} else
-			{
-				check_fatal_syn(syn123_conv( audio, encoding, got_samples*pcmframe
-				,	inaudio, inputenc, got_samples*pcminframe, &got_bytes, waver ));
+				error2( "out123 error %i: %s"
+				,	out123_errcode(ao), out123_strerror(ao) );
 			}
-		}
-		else
-			got_bytes = pcmframe * got_samples;
-		if(do_clip && encoding & MPG123_ENC_FLOAT)
-		{
-			size_t clipped = syn123_clip(audio, encoding, got_samples*channels);
-			if(verbose > 1 && clipped)
-				fprintf(stderr, ME ": clipped %"SIZE_P" samples\n", clipped);
-		}
-		mdebug("playing %zu bytes", got_bytes);
-		check_fatal_output(out123_play(ao, audio, got_bytes) < (int)got_bytes);
-		if(also_stdout && fwrite(audio, pcmframe, got_samples, stdout) < got_samples)
-		{
-			if(!quiet && errno != EINTR)
-				error1( "failed to copy stream to stdout: %s", strerror(errno));
 			safe_exit(133);
 		}
 		offset += got_samples;
@@ -825,18 +631,6 @@ static void catch_interrupt(void)
         intflag = TRUE;
 }
 #endif
-
-static void *fatal_malloc(size_t bytes)
-{
-	void *buf;
-	if(!(buf = malloc(bytes)))
-	{
-		if(!quiet)
-			error("OOM");
-		safe_exit(1);
-	}
-	return buf;
-}
 
 int main(int sys_argc, char ** sys_argv)
 {
@@ -955,65 +749,18 @@ int main(int sys_argc, char ** sys_argv)
 	if(encoding_name)
 	{
 		encoding = out123_enc_byname(encoding_name);
-		if(encoding < 0)
+		if(!encoding)
 		{
 			error1("Unknown encoding '%s' given!\n", encoding_name);
 			safe_exit(1);
 		}
 	}
-	inputenc = encoding;
-	if(inputenc_name)
-	{
-		inputenc = out123_enc_byname(inputenc_name);
-		if(inputenc < 0)
-		{
-			error1("Unknown input encoding '%s' given!\n", inputenc_name);
-			safe_exit(1);
-		}
-	}
-	if(!inputch)
-		inputch = channels;
-	pcminframe = out123_encsize(inputenc)*inputch;
 	pcmframe = out123_encsize(encoding)*channels;
-	audio = fatal_malloc(pcmblock*pcmframe);
-	// Full mixing is initiated if channel counts differ or a non-empty
-	// mixing matrix has been specified.
-	if(1 || inputch != channels || (mixmat_string && mixmat_string[0]))
-	{
-		mixmat = fatal_malloc(sizeof(double)*inputch*channels);
-		size_t mmcount = mytok_count(mixmat_string);
-		// Special cases of trivial down/upmixing need no user input.
-		if(mmcount == 0 && inputch == 1)
-		{
-			for(int oc=0; oc<channels; ++oc)
-				mixmat[oc] = 1.;
-		}
-		else if(mmcount == 0 && channels == 1)
-		{
-			for(int ic=0; ic<inputch; ++ic)
-				mixmat[ic] = 1./inputch;
-		}
-		else if(mmcount != inputch*channels)
-		{
-			merror( "Need %i mixing matrix entries, got %zu."
-			,	inputch*channels, mmcount );
-			safe_exit(1);
-		} else
-		{
-			char *next = mixmat_string;
-			for(int i=0; i<inputch*channels; ++i)
-			{
-				char *tok = mytok(&next);
-				mixmat[i] = tok ? atof(tok) : 0.;
-			}
-		}
-	}
-	// If converting or mixing, use separate input buffer.
-	if(inputenc != encoding || mixmat)
-		inaudio = fatal_malloc(pcmblock*pcminframe);
-	else
-		inaudio = audio;
+	bufferblock = pcmblock*pcmframe;
+	audio = (unsigned char*) malloc(bufferblock);
+
 	check_fatal_output(out123_set_buffer(ao, buffer_kb*1024));
+	/* This needs bufferblock set! */
 	check_fatal_output(out123_open(ao, driver, device));
 
 	if(verbose)
@@ -1021,26 +768,6 @@ int main(int sys_argc, char ** sys_argv)
 		long props = 0;
 		const char *encname;
 		char *realname = NULL;
-		if(inaudio != audio)
-		{
-			encname = out123_enc_name(inputenc);
-			fprintf( stderr, ME": input format: %li Hz, %i channels, %s\n"
-			,	rate, inputch, encname ? encname : "???" );
-			encname = out123_enc_name(syn123_mixenc(encoding));
-			if(mixmat)
-			{
-				fprintf( stderr, ME": mixing in %s\n", encname ? encname : "???" );
-				for(int oc=0; oc<channels; ++oc)
-				{
-					fprintf(stderr, ME": out ch %i mix:", oc);
-					for(int ic=0; ic<inputch; ++ic)
-						fprintf(stderr, " %4.2f", mixmat[SYN123_IOFF(oc,ic,inputch)]);
-					fprintf(stderr, "\n");
-				}
-			}
-			else
-				fprintf( stderr, ME": converting via %s\n", encname ? encname : "???" );
-		}
 		encname = out123_enc_name(encoding);
 		fprintf(stderr, ME": format: %li Hz, %i channels, %s\n"
 		,	rate, channels, encname ? encname : "???" );
@@ -1054,9 +781,8 @@ int main(int sys_argc, char ** sys_argv)
 	check_fatal_output(out123_start(ao, rate, channels, encoding));
 
 	input = stdin;
-	if(strcmp(signal_source, "file"))
-		generate = TRUE;
-	setup_wavegen(); // Used also for conversion/mixing.
+	if(wave_freqs)
+		setup_wavegen();
 
 	while(play_frame() && !intflag)
 	{
@@ -1083,8 +809,6 @@ static char* output_enclist(void)
 	int *enc_codes = NULL;
 
 	enc_count = out123_enc_list(&enc_codes);
-	if(enc_count < 0 || !enc_codes)
-		return NULL;
 	for(i=0;i<enc_count;++i)
 		len += strlen(out123_enc_name(enc_codes[i]));
 	len += enc_count;
@@ -1157,7 +881,7 @@ static void long_usage(int err)
 	fprintf(o,"        --list-modules     list the available modules\n");
 	fprintf(o," -a <d> --audiodevice <d>  select audio device (for files, empty or - is stdout)\n");
 	fprintf(o," -s     --stdout           write raw audio to stdout (-o raw -a -)\n");
-	fprintf(o," -S     --STDOUT           play AND output stream to stdout\n");
+	fprintf(o," -S     --STDOUT           play AND output stream (not implemented yet)\n");
 	fprintf(o," -O <f> --output <f>       raw output to given file (-o raw -a <f>)\n");
 	fprintf(o," -w <f> --wav <f>          write samples as WAV file in <f> (-o wav -a <f>)\n");
 	fprintf(o,"        --au <f>           write samples as Sun AU file in <f> (-o au -a <f>)\n");
@@ -1166,16 +890,8 @@ static void long_usage(int err)
 	fprintf(o," -c <n> --channels <n>     set channel count to <n>\n");
 	fprintf(o," -e <c> --encoding <c>     set output encoding (%s)\n"
 	,	enclist != NULL ? enclist : "OOM!");
-	fprintf(o,"-C <n> --inputch <n>       set input channel count for conversion\n");
-	fprintf(o,"TODO        --mix <m>          mixing matrix <m> between input and output channels\n");
-	fprintf(o,"TODO                           as linear factors, comma separated list for output\n");
-	fprintf(o,"TODO                           channel 1, then 2, ... default unity if channel counts\n");
-	fprintf(o,"TODO                           match, 0.5,0.5 for stereo to mono, 1,1 for the other way\n");
-	fprintf(o,"TODO        --preamp <p>       amplify signal with <p> dB (triggers mixing)\n");
-	fprintf(o," -E <c> --inputenc <c>     set input encoding for conversion\n");
-	fprintf(o,"        --clip             clip float samples before output\n");
-	fprintf(o," -m     --mono             set output channel count to 1\n");
-	fprintf(o,"        --stereo           set output channel count to 2 (default)\n");
+	fprintf(o," -m     --mono             set channel count to 1\n");
+	fprintf(o,"        --stereo           set channel count to 2 (default)\n");
 	fprintf(o,"        --list-encodings   list of encoding short and long names\n");
 	fprintf(o,"        --test-format      return 0 if configued audio format is supported\n");
 	fprintf(o,"        --test-encodings   print out possible encodings with given channels/rate\n");
@@ -1189,36 +905,17 @@ static void long_usage(int err)
 #endif
 	fprintf(o,"        --devbuffer <s>    set device buffer in seconds; <= 0 means default\n");
 	fprintf(o,"        --timelimit <s>    set time limit in PCM samples if >= 0\n");
-	fprintf(o,"        --source <s>       choose signal source: file (default),\n");
-	fprintf(o,"                           wave, pink, geiger; implied by --wave-freq,\n");
-	fprintf(o,"                           --pink-rows, --geiger-activity\n");
 	fprintf(o,"        --wave-freq <f>    set wave generator frequency or list of those\n");
 	fprintf(o,"                           with comma separation for enabling a generated\n");
 	fprintf(o,"                           test signal instead of standard input,\n");
 	fprintf(o,"                           empty value repeating the previous\n");
 	fprintf(o,"        --wave-pat <p>     set wave pattern(s) (out of those:\n");
-	{
-		int i=0;
-		const char* wn;
-		while((wn=syn123_wave_name(i++)) && wn[0] != '?')
-			fprintf(o, "                           %s\n", wn);
-	}
-	fprintf(o,"                           ),\n");
+	fprintf(o,"                           %s),\n", wave_pattern_list);
 	fprintf(o,"                           empty value repeating the previous\n");
 	fprintf(o,"        --wave-phase <p>   set wave phase shift(s), negative values\n");
 	fprintf(o,"                           inverting the pattern in time and\n");
-	fprintf(o,"                           empty value repeating the previous,\n");
-	fprintf(o,"                           --wave-direction overriding the negative bit\n");
-	fprintf(o,"        --wave-direction <d> set direction explicitly (the sign counts)\n");
-	fprintf(o,"        --genbuffer <b>    buffer size (limit) for signal generators,\n");
-	fprintf(o,"                           if > 0 (default), this enforces a periodic\n");
-	fprintf(o,"                           buffer also for non-periodic signals, benefit:\n");
-	fprintf(o,"                           less runtime CPU overhead\n");
-	fprintf(o,"        --wave-limit <l>   alias for --genbuffer\n");
-	fprintf(o,"        --pink-rows <r>    activate pink noise source and choose rows for\n");
-	fprintf(o,"                   `       the algorithm (<1 chooses default)\n");
-	fprintf(o,"        --geiger-activity <a> a Geiger-Mueller counter as source, with\n");
-	fprintf(o,"                           <a> average events per second\n");
+	fprintf(o,"                           empty value repeating the previous\n");
+	fprintf(o,"        --wave-limit <l>   soft limit on wave table size\n");
 	fprintf(o," -t     --test             no output, just read and discard data (-o test)\n");
 	fprintf(o," -v[*]  --verbose          increase verboselevel\n");
 	#ifdef HAVE_SETPRIORITY
@@ -1236,8 +933,7 @@ static void long_usage(int err)
 	fprintf(o,"        --longhelp         give this long help listing\n");
 	fprintf(o,"        --version          give name / version string\n");
 
-	fprintf(o,"\nSee the manpage out123(1) for more information. Also, note that\n");
-	fprintf(o,"any numeric arguments are parsed in C locale (pi is 3.14, not 3,14).");
+	fprintf(o,"\nSee the manpage out123(1) for more information.\n");
 	free(enclist);
 	safe_exit(err);
 }

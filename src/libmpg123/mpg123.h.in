@@ -131,19 +131,14 @@ struct mpg123_handle_struct;
 typedef struct mpg123_handle_struct mpg123_handle;
 
 /** Function to initialise the mpg123 library. 
- * This should be called once in a non-parallel context. It is not explicitly
- * thread-safe, but repeated/concurrent calls still _should_ be safe as static
- * tables are filled with the same values anyway.
+ *	This function is not thread-safe. Call it exactly once per process, before any other (possibly threaded) work with the library.
  *
  *	\return MPG123_OK if successful, otherwise an error number.
  */
 MPG123_EXPORT int mpg123_init(void);
 
-/** Superfluous Function to close down the mpg123 library.
- * This was created with the thought that there sometime will be cleanup code
- * to be run after library use. This never materialized. You can forget about
- * this function and it is only here for old programs that do call it.
- */
+/** Function to close down the mpg123 library. 
+ *	This function is not thread-safe. Call it exactly once per process, before any other (possibly threaded) work with the library. */
 MPG123_EXPORT void mpg123_exit(void);
 
 /** Create a handle with optional choice of decoder (named by a string, see mpg123_decoders() or mpg123_supported_decoders()).
@@ -183,11 +178,6 @@ enum mpg123_parms
 	,MPG123_PREFRAMES /**< Decode/ignore that many frames in advance for layer 3. This is needed to fill bit reservoir after seeking, for example (but also at least one frame in advance is needed to have all "normal" data for layer 3). Give a positive integer value, please.*/
 	,MPG123_FEEDPOOL  /**< For feeder mode, keep that many buffers in a pool to avoid frequent malloc/free. The pool is allocated on mpg123_open_feed(). If you change this parameter afterwards, you can trigger growth and shrinkage during decoding. The default value could change any time. If you care about this, then set it. (integer) */
 	,MPG123_FEEDBUFFER /**< Minimal size of one internal feeder buffer, again, the default value is subject to change. (integer) */
-	,MPG123_FREEFORMAT_SIZE /**< Tell the parser a free-format frame size to
-	 * avoid read-ahead to get it. A value of -1 (default) means that the parser
-	 * will determine it. The parameter value is applied during decoder setup
-	 * for a freshly opened stream only.
-	 */
 };
 
 /** Flag bits for MPG123_FLAGS, use the usual binary or to combine. */
@@ -218,21 +208,6 @@ enum mpg123_param_flags
 	 *  the stream is assumed as non-seekable unless overridden.
 	 */
 	,MPG123_FORCE_SEEKABLE = 0x40000 /**< 19th bit: Force the stream to be seekable. */
-	,MPG123_STORE_RAW_ID3  = 0x80000 /**< store raw ID3 data (even if skipping) */
-	,MPG123_FORCE_ENDIAN   = 0x100000 /**< Enforce endianess of output samples.
-	 *  This is not reflected in the format codes. If this flag is set along with
-	 *  MPG123_BIG_ENDIAN, MPG123_ENC_SIGNED16 means s16be, without
-	 *  MPG123_BIG_ENDIAN, it means s16le. Normal operation without
-	 *  MPG123_FORCE_ENDIAN produces output in native byte order.
-	 */
-	,MPG123_BIG_ENDIAN     = 0x200000 /**< Choose big endian instead of little. */
-	,MPG123_NO_READAHEAD   = 0x400000 /**< Disable read-ahead in parser. If
-	 * you know you provide full frames to the feeder API, this enables
-	 * decoder output from the first one on, instead of having to wait for
-	 * the next frame to confirm that the stream is healthy. It also disables
-	 * free format support unless you provide a frame size using
-	 * MPG123_FREEFORMAT_SIZE.
-	 */
 };
 
 /** choices for MPG123_RVA */
@@ -284,7 +259,6 @@ enum mpg123_feature_set
 	,MPG123_FEATURE_PARSE_ICY            /**< ICY support                  */
 	,MPG123_FEATURE_TIMEOUT_READ         /**< Reader with timeout (network). */
 	,MPG123_FEATURE_EQUALIZER            /**< tunable equalizer */
-	,MPG123_FEATURE_MOREINFO             /**< more info extraction (for frame analyzer) */
 };
 
 /** Query libmpg123 features.
@@ -501,8 +475,7 @@ MPG123_EXPORT int mpg123_format_all(mpg123_handle *mh);
 
 /** Set the audio format support of a mpg123_handle in detail:
  *  \param mh handle
- *  \param rate The sample rate value (in Hertz). Special value 0 means
- *              all standard rates (since mpg123 1.26.0).
+ *  \param rate The sample rate value (in Hertz).
  *  \param channels A combination of MPG123_STEREO and MPG123_MONO.
  *  \param encodings A combination of accepted encodings for rate and channels, p.ex MPG123_ENC_SIGNED16 | MPG123_ENC_ULAW_8 (or 0 for no support). Please note that some encodings may not be supported in the library build and thus will be ignored here.
  *  \return MPG123_OK on success, MPG123_ERR if there was an error. */
@@ -932,45 +905,12 @@ struct mpg123_frameinfo
 	enum mpg123_vbr vbr;			/**< The VBR mode. */
 };
 
-/** Data structure for even more detailed information out of the decoder,
-  * for MPEG layer III only.
-  * This was added to support the frame analyzer by the Lame project and
-  * just follows what was used there before. You know what the fields mean
-  * if you want use this structure. */
-struct mpg123_moreinfo
-{
-	double xr[2][2][576];
-	double sfb[2][2][22];  /* [2][2][SBMAX_l] */
-	double sfb_s[2][2][3*13]; /* [2][2][3*SBMAX_s] */
-	int qss[2][2];
-	int big_values[2][2];
-	int sub_gain[2][2][3];
-	int scalefac_scale[2][2];
-	int preflag[2][2];
-	int blocktype[2][2];
-	int mixed[2][2];
-	int mainbits[2][2];
-	int sfbits[2][2];
-	int scfsi[2];
-	int maindata;
-	int padding;
-};
-
 /** Get frame information about the MPEG audio bitstream and store it in a mpg123_frameinfo structure.
  *  \param mh handle
  *  \param mi address of existing frameinfo structure to write to
  *  \return MPG123_OK on success
  */
 MPG123_EXPORT int mpg123_info(mpg123_handle *mh, struct mpg123_frameinfo *mi);
-
-/** Trigger collection of additional decoder information while decoding.
- *  \param mh handle
- *  \param mi pointer to data storage (NULL to disable collection)
- *  \return MPG123_OK if the collection was enabled/disabled as desired, MPG123_ERR
- *    otherwise (e.g. if the feature is disabled)
- */
-MPG123_EXPORT int mpg123_set_moreinfo( mpg123_handle *mh
-,	struct mpg123_moreinfo *mi );
 
 /** Get the safe output buffer size for all cases
  *  (when you want to replace the internal buffer)
@@ -1033,9 +973,6 @@ enum mpg123_state
 	,MPG123_BUFFERFILL   /**< Get fill of internal (feed) input buffer as integer byte count returned as long and as double. An error is returned on integer overflow while converting to (signed) long, but the returned floating point value shold still be fine. */
 	,MPG123_FRANKENSTEIN /**< Stream consists of carelessly stitched together files. Seeking may yield unexpected results (also with MPG123_ACCURATE, it may be confused). */
 	,MPG123_FRESH_DECODER /**< Decoder structure has been updated, possibly indicating changed stream (integer value, 0 if false, 1 if true). Flag is cleared after retrieval. */
-	,MPG123_ENC_DELAY /** Encoder delay read from Info tag (layer III, -1 if unknown). */
-	,MPG123_ENC_PADDING /** Encoder padding read from Info tag (layer III, -1 if unknown). */
-	,MPG123_DEC_DELAY /** Decoder delay (for layer III only, -1 otherwise). */
 };
 
 /** Get various current decoder/stream state information.
@@ -1068,22 +1005,12 @@ typedef struct
 	size_t fill; /**< number of used bytes (including closing zero byte) */
 } mpg123_string;
 
-/** Allocate and intialize a new string.
- *  \param val optional initial string value (can be NULL)
- */
-MPG123_EXPORT mpg123_string* mpg123_new_string(const char* val);
-
-/** Free memory of contents and the string structure itself.
- *  \param sb string handle
- */
-MPG123_EXPORT void mpg123_delete_string(mpg123_string* sb);
-
-/** Initialize an existing mpg123_string structure to {NULL, 0, 0}.
+/** Create and allocate memory for a new mpg123_string
  *  \param sb string handle (address of existing structure on your side)
  */
 MPG123_EXPORT void mpg123_init_string(mpg123_string* sb);
 
-/** Free-up memory of the contents of an mpg123_string (not the struct itself).
+/** Free-up mempory for an existing mpg123_string
  *  \param sb string handle
  */
 MPG123_EXPORT void mpg123_free_string(mpg123_string* sb);
@@ -1283,8 +1210,7 @@ typedef struct
 	size_t          texts;        /**< Numer of text fields. */
 	mpg123_text    *extra;        /**< The array of extra (TXXX) fields. */
 	size_t          extras;       /**< Number of extra text (TXXX) fields. */
-	mpg123_picture  *picture;     /**< Array of ID3v2 pictures fields (APIC).
-		Only populated if MPG123_PICTURE flag is set! */
+	mpg123_picture  *picture;     /**< Array of ID3v2 pictures fields (APIC). */
 	size_t           pictures;    /**< Number of picture (APIC) fields. */
 } mpg123_id3v2;
 
@@ -1325,21 +1251,6 @@ MPG123_EXPORT void mpg123_meta_free(mpg123_handle *mh);
  */
 MPG123_EXPORT int mpg123_id3( mpg123_handle *mh
 ,	mpg123_id3v1 **v1, mpg123_id3v2 **v2 );
-
-/** Return pointers to and size of stored raw ID3 data if storage has
- *  been configured with MPG123_RAW_ID3 and stream parsing passed the
- *  metadata already. Null value with zero size is a possibility!
- *  The storage can change at any next API call.
- *  \param v1 address to store pointer to v1 tag
- *  \param v1_size size of v1 data in bytes
- *  \param v2 address to store pointer to v2 tag
- *  \param v2_size size of v2 data in bytes
- *  \return MPG123_OK or MPG123_ERR. Only on MPG123_OK the output
- *          values are set.
- */
-MPG123_EXPORT int mpg123_id3_raw( mpg123_handle *mh
-,	unsigned char **v1, size_t *v1_size
-,	unsigned char **v2, size_t *v2_size );
 
 /** Point icy_meta to existing data structure wich may change on any next read/decode function call.
  *  \param mh handle
@@ -1415,8 +1326,7 @@ MPG123_EXPORT int mpg123_fmt_all(mpg123_pars *mp);
 
 /** Set the audio format support of a mpg123_pars in detail:
  * \param mp parameter handle
- * \param rate The sample rate value (in Hertz). Special value 0 means
- *             all standard rates (since mpg123 1.26.0).
+ * \param rate The sample rate value (in Hertz).
  * \param channels A combination of MPG123_STEREO and MPG123_MONO.
  * \param encodings A combination of accepted encodings for rate and channels,
  *                  p.ex MPG123_ENC_SIGNED16|MPG123_ENC_ULAW_8 (or 0 for no

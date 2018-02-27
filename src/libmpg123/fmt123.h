@@ -99,21 +99,19 @@ enum mpg123_enc_enum
  * \return size of one sample in bytes
  */
 #define MPG123_SAMPLESIZE(enc) ( \
-	(enc) < 1 \
-	? 0 \
-	: ( (enc) & MPG123_ENC_8 \
-		?	1 \
-		:	( (enc) & MPG123_ENC_16 \
-			?	2 \
-			:	( (enc) & MPG123_ENC_24 \
-				?	3 \
-				:	( (  (enc) & MPG123_ENC_32 \
-					  || (enc) == MPG123_ENC_FLOAT_32 ) \
-					?	4 \
-					:	( (enc) == MPG123_ENC_FLOAT_64 \
-						?	8 \
-						:	0 \
-)	)	)	)	)	)
+	(enc) & MPG123_ENC_8 \
+	?	1 \
+	:	( (enc) & MPG123_ENC_16 \
+		?	2 \
+		:	( (enc) & MPG123_ENC_24 \
+			?	3 \
+			:	( (  (enc) & MPG123_ENC_32 \
+				  || (enc) == MPG123_ENC_FLOAT_32 ) \
+				?	4 \
+				:	( (enc) == MPG123_ENC_FLOAT_64 \
+					?	8 \
+					:	0 \
+)	)	)	)	)
 
 /** Structure defining an audio format.
  *  Providing the members as individual function arguments to define a certain

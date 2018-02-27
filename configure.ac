@@ -8,31 +8,24 @@ dnl Require autoconf version >= 2.57
 AC_PREREQ(2.57)
 
 dnl ############# Initialisation
-AC_INIT([mpg123], [1.26.0], [maintainer@mpg123.org])
+AC_INIT([mpg123], [1.25.9], [maintainer@mpg123.org])
 dnl Increment API_VERSION when the API gets changes (new functions).
 
 dnl libmpg123
-API_VERSION=45
-LIB_PATCHLEVEL=1
+API_VERSION=44
+LIB_PATCHLEVEL=8
 
 dnl libout123
 OUTAPI_VERSION=2
-OUTLIB_PATCHLEVEL=3
-
-dnl libsyn123
-SYNAPI_VERSION=1
-SYNLIB_PATCHLEVEL=0
+OUTLIB_PATCHLEVEL=1
 
 dnl Since we want to be backwards compatible, both sides get set to API_VERSION.
 LIBMPG123_VERSION=$API_VERSION:$LIB_PATCHLEVEL:$API_VERSION
 LIBOUT123_VERSION=$OUTAPI_VERSION:$OUTLIB_PATCHLEVEL:$OUTAPI_VERSION
-LIBSYN123_VERSION=$SYNAPI_VERSION:$SYNLIB_PATCHLEVEL:$SYNAPI_VERSION
 AC_SUBST(LIBMPG123_VERSION)
 AC_SUBST(API_VERSION)
 AC_SUBST(LIBOUT123_VERSION)
 AC_SUBST(OUTAPI_VERSION)
-AC_SUBST(LIBSYN123_VERSION)
-AC_SUBST(SYNAPI_VERSION)
 
 
 AC_CONFIG_SRCDIR(src/mpg123.c)
@@ -412,19 +405,6 @@ if test "x$feeder" = "xdisabled"; then
   AC_DEFINE(NO_FEEDER, 1, [ Define to disable feeder and buffered readers. ])
 fi
 
-moreinfo=enabled
-AC_ARG_ENABLE(moreinfo,
-              [  --disable-moreinfo=[no/yes] no extra information for frame analyzers ],
-              [
-                if test "x$enableval" = xno; then
-                  moreinfo="disabled"
-                fi
-              ], [])
-
-if test "x$moreinfo" = "xdisabled"; then
-  AC_DEFINE(NO_MOREINFO, 1, [ Define to disable analyzer info. ])
-fi
-
 messages=enabled
 AC_ARG_ENABLE(messages,
               [  --disable-messages=[no/yes] no error/warning messages on the console ],
@@ -454,18 +434,15 @@ if test "x$newhuff" = "xenabled"; then
   AC_DEFINE(USE_NEW_HUFFTABLE, 1, [ Define for new Huffman decoding scheme. ])
 fi
 
-integers=quality
+integers=fast
 AC_ARG_ENABLE(int-quality,
 [  --enable-int-quality=[yes/no] use rounding instead of fast truncation for integer output, where possible ],
 [
-  if test "x$enableval" = xno; then
-    integers=fast
+  if test "x$enableval" = xyes; then
+    integers=quality
+    AC_DEFINE(ACCURATE_ROUNDING,   1, [ Define to use proper rounding. ])
   fi
 ], [])
-
-if test $integers = quality; then
-  AC_DEFINE(ACCURATE_ROUNDING,   1, [ Define to use proper rounding. ])
-fi  
 
 int16=enabled
 AC_ARG_ENABLE(16bit,
@@ -569,20 +546,6 @@ AC_ARG_ENABLE(ieeefloat,
 if test "x$ieee" = xenabled; then
   echo "We assume IEEE754 floating point format."
   AC_DEFINE(IEEE_FLOAT,   1, [ Define to indicate that float storage follows IEEE754. ])
-fi
-
-AC_ARG_ENABLE(cases,
-  [ --enable-cases=[yes/no] include special cases for likely parameter values (channel count, encoding sizes in libsyn123 routines) in the hope of better optimization at the expense of some code bloat (default enabled) ],
-  [
-     if test "x$enableval" = xyes; then
-       specialcases=enabled
-     else
-       specialcases=disabled
-     fi
-  ], [ specialcases=enabled ])
-
-if test "x$specialcases" = xdisabled; then
-  AC_DEFINE(SYN123_NO_CASES, 1, [ Define to not duplicate some code for likely cases in libsyn123. ])
 fi
 
 sys_cppflags=
@@ -1165,11 +1128,7 @@ AC_SUBST(LFS_LOBJ)
 
 dnl ############## Function Checks
 
-AC_CHECK_FUNCS([mmap],[have_mmap=yes],[have_mmap=no])
-if test "x$have_mmap" = "xno"; then
-  AC_CHECK_HEADERS([sys/ipc.h sys/shm.h],[], [buffer=disabled])
-  AC_CHECK_FUNCS([shmget shmat shmdt shmctl],[], [buffer=disabled])
-fi
+AC_FUNC_MMAP
 
 # Check if system supports termios
 AC_SYS_POSIX_TERMIOS
@@ -1258,9 +1217,6 @@ AC_CHECK_LIB([mx], [powf])
 #	AC_DEFINE( 
 #fi
 
-# Optionally use platform macros for byte swapping.
-AC_CHECK_HEADERS([byteswap.h])
-
 dnl ############## Choose compiler flags and CPU
 
 # do not assume gcc here, so no flags by default
@@ -1282,7 +1238,7 @@ fi
 # gcc specific...
 if test x"$GCC" = xyes; then
 	if test x"$nagging" = xenabled; then
-		ADD_CFLAGS="$ADD_CFLAGS -Wall -Werror -std=c99 -pedantic"
+		ADD_CFLAGS="$ADD_CFLAGS -Wall -Werror -std=c89 -pedantic -DPLAIN_C89"
 	fi
 fi
 
@@ -2441,11 +2397,9 @@ AC_CONFIG_FILES([
 	Makefile
 	libmpg123.pc
 	libout123.pc
-	libsyn123.pc
 	mpg123.spec
 	src/libmpg123/mpg123.h
 	src/libout123/out123.h
-	src/libsyn123/syn123.h
 ])
 
 AC_OUTPUT
@@ -2510,9 +2464,6 @@ echo "
 
 Note: Disabling core features is not commonly done and some combinations might not build/work. If you encounter such a case, help yourself (and provide a patch) or just poke the maintainers."
 # just an empty line
-echo
-
-echo "  libsyn123 special cases . $specialcases"
 echo
 
 echo "  Modules ................. $modules"
