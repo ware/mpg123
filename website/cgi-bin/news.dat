@@ -1,3 +1,22 @@
+:date 2017-12-02
+:by Thomas
+:release 1.25.8
+:title A little bit of free format and empty terminals
+.<p>Some fixes for the end of the year, while new API additions
+,are waiting in trunk:</p>
+.<ul>
+.<li>mpg123: Also disable cursor/video games for empty TERM
+.(not just unset and dumb).</li>
+.<li>libmpg123:<ul>
+.<li>Accept changing mode extension bits when looking for next
+.  header for detecting free-format streams
+.  (<a href=/bugs/257>bug 257</a>).</li>
+.<li>Fix compute_bpf() for free-format streams (needed to
+.  estimate track length and working fuzzy seeking in absence of
+.  an Info tag).</li>
+.</ul></li>
+.</ul>
+
 :date 2017-09-25
 :by Thomas
 :release 1.25.7
